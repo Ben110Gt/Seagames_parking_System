@@ -1,0 +1,24 @@
+package routes
+
+import (
+	"seagame/ticket/backend/database"
+	"seagame/ticket/backend/internal/handler"
+	"seagame/ticket/backend/internal/repository"
+	"seagame/ticket/backend/internal/service"
+
+	"github.com/gofiber/fiber/v2"
+)
+
+func SetupAuthRoutes(app *fiber.App) {
+	userRepo := repository.NewUserRepository(database.GetDB())
+	userService := service.NewUserService(userRepo)
+	authHandler := handler.NewAuthHandler(userService)
+
+	// /auth group
+	auth := app.Group("/auth")
+	auth.Post("/login", authHandler.Login)
+	auth.Post("/register", authHandler.Register)
+
+	// Root-level /login สำหรับ Flutter frontend ที่เรียก POST /login
+	app.Post("/login", authHandler.Login)
+}
