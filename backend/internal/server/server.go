@@ -2,15 +2,22 @@ package server
 
 import (
 	"log"
+	"os"
 	"seagame/ticket/backend/database"
 	"seagame/ticket/backend/internal/routes"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/joho/godotenv"
 )
 
 func NewServer() {
+
+	if err := godotenv.Load("../.env"); err != nil {
+		log.Fatal("Error loading .env file Server")
+	}
+
 	app := fiber.New(fiber.Config{
 		AppName: "Seagames Parking System v1.0",
 	})
@@ -38,7 +45,8 @@ func NewServer() {
 	routes.SetupAuthRoutes(app)
 	routes.SetupUserRoutes(app)
 	routes.TicketRoutes(app)
-	routes.SetupMembershipRoutes(app)
 
-	log.Fatal(app.Listen(":3000"))
+	port := os.Getenv("APP_PORT")
+
+	app.Listen("0.0.0.0:" + port)
 }

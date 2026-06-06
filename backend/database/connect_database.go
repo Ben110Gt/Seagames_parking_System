@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-
+	"seagame/ticket/backend/internal/models/membership"
 	"seagame/ticket/backend/internal/models/ticket"
+	"seagame/ticket/backend/internal/models/transaction"
 	usermodel "seagame/ticket/backend/internal/models/user"
 
 	"github.com/joho/godotenv"
@@ -51,11 +52,12 @@ func ConnectDatabase() {
 
 	log.Println("Database connected successfully")
 
-	// Migrate the schema
+	//Migrate the schema
 	if err := db.AutoMigrate(
 		&usermodel.User{},
 		&ticket.Ticket{},
-		&ticket.Membership{},
+		&membership.MembershipCard{},
+		&transaction.Transaction{},
 	); err != nil {
 		log.Printf("Warning: AutoMigrate error: %v", err)
 	}

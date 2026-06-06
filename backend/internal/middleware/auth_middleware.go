@@ -1,4 +1,4 @@
-package middlewares
+package middleware
 
 import (
 	util "seagame/ticket/backend/utils"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 // JWTMiddleware ตรวจสอบ JWT
@@ -69,4 +70,17 @@ func RoleMiddleware(roles ...string) fiber.Handler {
 
 		return c.Next()
 	}
+}
+
+// GetUserID extracts user ID from JWT locals set by JWTMiddleware.
+func GetUserID(c *fiber.Ctx) uuid.UUID {
+	userIDStr, ok := c.Locals("user_id").(string)
+	if !ok {
+		return uuid.Nil
+	}
+	id, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return uuid.Nil
+	}
+	return id
 }

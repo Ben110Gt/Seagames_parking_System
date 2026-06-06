@@ -2,92 +2,72 @@ package repository
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"seagame/ticket/backend/internal/models/ticket"
 	"time"
 
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 type TicketRepository interface {
 	Create(ctx context.Context, t *ticket.Ticket) error
-	FindByTicketCode(ctx context.Context, ticketCode string) (ticket.Ticket, error)
-	FindActiveByPlateNumber(ctx context.Context, plateNumber string) (ticket.Ticket, error)
-	Update(ctx context.Context, t *ticket.Ticket) error
-	SoftDelete(ctx context.Context, id uuid.UUID) error
-	SearchByPlateNumber(ctx context.Context, plateNumber string) ([]ticket.Ticket, error)
+	FindByCode(ctx context.Context, code string) (*ticket.Ticket, error)
+	FindByCodeUnscoped(ctx context.Context, code string) (*ticket.Ticket, error)
+	FindByPlate(ctx context.Context, plate string) ([]ticket.Ticket, error)
+	FindActive(ctx context.Context) ([]ticket.Ticket, error)
+	SearchTickets(ctx context.Context, query, status string) ([]ticket.Ticket, error)
 	GetIncomeByDateRange(ctx context.Context, start, end time.Time) ([]ticket.Ticket, error)
+	UpdateCheckout(ctx context.Context, t *ticket.Ticket) error
+	SoftDelete(ctx context.Context, t *ticket.Ticket) error
 }
 
-type ticketRepository struct {
-	db *gorm.DB
-}
+type ticketRepo struct{ db *gorm.DB }
 
-func NewTicketRepository(db *gorm.DB) TicketRepository {
-	return &ticketRepository{db: db}
-}
+func NewTicketRepository(db *gorm.DB) TicketRepository { return &ticketRepo{db} }
 
-func (r *ticketRepository) Create(ctx context.Context, t *ticket.Ticket) error {
-	if t.ID == uuid.Nil {
-		t.ID = uuid.New()
-	}
+func (r *ticketRepo) Create(ctx context.Context, t *ticket.Ticket) error {
 	return r.db.WithContext(ctx).Create(t).Error
 }
 
-func (r *ticketRepository) FindByTicketCode(ctx context.Context, ticketCode string) (ticket.Ticket, error) {
-	var tk ticket.Ticket
-	err := r.db.WithContext(ctx).Where("ticket_code = ?", ticketCode).First(&tk).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return tk, fmt.Errorf("ticket not found: %s", ticketCode)
-		}
-		return tk, err
-	}
-	return tk, nil
+func (r *ticketRepo) FindByCode(ctx context.Context, code string) (*ticket.Ticket, error) {
+	var t ticket.Ticket
+	return &t, r.db.WithContext(ctx).Where("ticket_code = ?", code).First(&t).Error
 }
 
-func (r *ticketRepository) FindActiveByPlateNumber(ctx context.Context, plateNumber string) (ticket.Ticket, error) {
-	var tk ticket.Ticket
-	err := r.db.WithContext(ctx).
-		Where("plate_number = ? AND status = ?", plateNumber, "In").
-		Order("created_at DESC").
-		First(&tk).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return tk, fmt.Errorf("no active ticket for plate: %s", plateNumber)
-		}
-		return tk, err
-	}
-	return tk, nil
+func (r *ticketRepo) FindByCodeUnscoped(ctx context.Context, code string) (*ticket.Ticket, error) {
+	var t ticket.Ticket
+	return &t, r.db.WithContext(ctx).Unscoped().Where("ticket_code = ?", code).First(&t).Error
 }
 
-func (r *ticketRepository) Update(ctx context.Context, t *ticket.Ticket) error {
+func (r *ticketRepo) FindByPlate(ctx context.Context, plate string) ([]ticket.Ticket, error) {
+	var ts []ticket.Ticket
+	return ts, r.db.WithContext(ctx).Where("plate_number ILIKE ?", "%"+plate+"%").Order("checkin_time DESC").Find(&ts).Error
+}
+
+func (r *ticketRepo) FindActive(ctx context.Context) ([]ticket.Ticket, error) {
+	var ts []ticket.Ticket
+	return ts, r.db.WithContext(ctx).Where("status = ?", "in").Order("checkin_time ASC").Find(&ts).Error
+}
+
+func (r *ticketRepo) SearchTickets(ctx context.Context, query, status string) ([]ticket.Ticket, error) {
+	var ts []ticket.Ticket
+	q := r.db.WithContext(ctx).Where("plate_number ILIKE ? OR ticket_code ILIKE ?", "%"+query+"%", "%"+query+"%")
+	if status != "" && status != "all" {
+		q = q.Where("status = ?", status)
+	}
+	return ts, q.Order("checkin_time DESC").Limit(50).Find(&ts).Error
+}
+
+func (r *ticketRepo) GetIncomeByDateRange(ctx context.Context, start, end time.Time) ([]ticket.Ticket, error) {
+	var ts []ticket.Ticket
+	return ts, r.db.WithContext(ctx).Unscoped().
+		Where("status = ? AND checkout_time >= ? AND checkout_time <= ?", "out", start, end).
+		Find(&ts).Error
+}
+
+func (r *ticketRepo) UpdateCheckout(ctx context.Context, t *ticket.Ticket) error {
 	return r.db.WithContext(ctx).Save(t).Error
 }
 
-func (r *ticketRepository) SoftDelete(ctx context.Context, id uuid.UUID) error {
-	return r.db.WithContext(ctx).Delete(&ticket.Ticket{}, "id = ?", id).Error
-}
-
-// SearchByPlateNumber ค้นหาตั๋วจากทะเบียนรถ (กรณีลูกค้าทำตั๋วหาย)
-func (r *ticketRepository) SearchByPlateNumber(ctx context.Context, plateNumber string) ([]ticket.Ticket, error) {
-	var tickets []ticket.Ticket
-	err := r.db.WithContext(ctx).
-		Where("plate_number ILIKE ?", "%"+plateNumber+"%").
-		Order("created_at DESC").
-		Limit(50).
-		Find(&tickets).Error
-	return tickets, err
-}
-
-// GetIncomeByDateRange ดึงตั๋วที่ check-out แล้วในช่วงเวลา
-func (r *ticketRepository) GetIncomeByDateRange(ctx context.Context, start, end time.Time) ([]ticket.Ticket, error) {
-	var tickets []ticket.Ticket
-	err := r.db.WithContext(ctx).
-		Unscoped(). // รวมที่ soft-deleted ด้วย (ตั๋วที่ check-out แล้ว)
-		Where("status = ? AND check_out BETWEEN ? AND ?", "Out", start, end).
-		Find(&tickets).Error
-	return tickets, err
+func (r *ticketRepo) SoftDelete(ctx context.Context, t *ticket.Ticket) error {
+	return r.db.WithContext(ctx).Delete(t).Error
 }

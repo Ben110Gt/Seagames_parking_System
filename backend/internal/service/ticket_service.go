@@ -2,12 +2,17 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"seagame/ticket/backend/internal/models/ticket"
 	"seagame/ticket/backend/internal/repository"
 	util "seagame/ticket/backend/utils"
 	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type TicketService interface {
@@ -18,33 +23,35 @@ type TicketService interface {
 }
 
 type ticketService struct {
-	repo       repository.TicketRepository
-	memberRepo repository.MembershipRepository
+	repo            repository.TicketRepository
+	memberRepo      repository.MembershipRepository
+	transactionRepo repository.TransactionRepository
 }
 
-func NewTicketService(ticketRepo repository.TicketRepository, memberRepo repository.MembershipRepository) TicketService {
+func NewTicketService(ticketRepo repository.TicketRepository, memberRepo repository.MembershipRepository, transactionRepo repository.TransactionRepository) TicketService {
 	return &ticketService{
-		repo:       ticketRepo,
-		memberRepo: memberRepo,
+		repo:            ticketRepo,
+		memberRepo:      memberRepo,
+		transactionRepo: transactionRepo,
 	}
 }
 
 const (
 	BaseFee    float64 = 2000
-	PenaltyFee float64 = 2000 // ค่าปรับต่อวัน
+	PenaltyFee float64 = 2000
 )
 
-// CreateTicket ออกตั๋วเมื่อรถเข้า (Check-in)
 func (s *ticketService) CreateTicket(ctx context.Context, req *ticket.CreateTicketRequest) (*ticket.CreateTicketResponse, error) {
-	ticketCode := fmt.Sprintf("SG-%d", time.Now().UnixNano())
+	ticketCode := util.GenerateTicketCode()
 	now := time.Now()
 
 	tk := &ticket.Ticket{
-		TicketCode:  ticketCode,
-		PlateNumber: req.PlateNumber,
-		CheckIn:     &now,
-		TotalFee:    BaseFee,
-		Status:      "In", // รถเข้ามาแล้ว
+		TicketCode:   ticketCode,
+		PlateNumber:  req.PlateNumber,
+		CustomerRole: "Customer",
+		CheckinTime:  now,
+		Status:       "in",
+		IssuedBy:     req.IssuedBy,
 	}
 
 	if err := s.repo.Create(ctx, tk); err != nil {
@@ -62,21 +69,60 @@ func (s *ticketService) CreateTicket(ctx context.Context, req *ticket.CreateTick
 	}, nil
 }
 
-// CheckTicket สแกนตั๋วเมื่อรถออก (Check-out)
-func (s *ticketService) CheckTicket(ctx context.Context, req *ticket.CheckTicketRequest) (*ticket.CheckTicketResponse, error) {
-	tk, err := s.repo.FindByTicketCode(ctx, req.TicketCode)
+func (s *ticketService) checkoutMembership(ctx context.Context, cardCode string) (*ticket.CheckTicketResponse, error) {
+	// if s.memberRepo == nil {
+	// 	return nil, errors.New("ticket or membership card not found")
+	// }
+
+	card, err := s.memberRepo.FindByCode(ctx, cardCode)
 	if err != nil {
+		return nil, errors.New("ticket or membership card not found")
+	}
+
+	now := time.Now()
+	if !card.IsActive() {
+		return nil, errors.New("membership expired — please purchase a day ticket")
+	}
+
+	checkout := &ticket.CheckoutResponse{
+		TicketCode:   card.CardCode,
+		PlateNumber:  card.PlateNumber,
+		CustomerRole: "Membership",
+		CheckinTime:  card.RegistrationDate,
+		CheckoutTime: now,
+		DaysParked:   0,
+		FineAmount:   0,
+		Message:      "Membership valid. Access granted. No charge.",
+	}
+
+	return &ticket.CheckTicketResponse{
+		Checkout: checkout,
+		Message:  checkout.Message,
+	}, nil
+}
+
+func (s *ticketService) CheckTicket(ctx context.Context, req *ticket.CheckTicketRequest) (*ticket.CheckTicketResponse, error) {
+	tk, err := s.repo.FindByCode(ctx, req.TicketCode)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if archived, archErr := s.repo.FindByCodeUnscoped(ctx, req.TicketCode); archErr == nil {
+				return nil, fmt.Errorf("ticket %s has already been checked out", archived.TicketCode)
+			}
+			if strings.HasPrefix(req.TicketCode, "MBR-") {
+				return s.checkoutMembership(ctx, req.TicketCode)
+			}
+			return nil, fmt.Errorf("ticket %s not found", req.TicketCode)
+		}
 		return nil, err
 	}
 
-	if tk.Status == "Out" {
+	if tk.Status == "out" {
 		return nil, fmt.Errorf("ticket %s has already been checked out", req.TicketCode)
 	}
 
 	now := time.Now()
-	totalFee := BaseFee
+	fineAmount := int64(0)
 
-	// ตรวจสอบ membership — ถ้าเป็นสมาชิกไม่คิดค่าปรับ
 	isMember := false
 	if s.memberRepo != nil {
 		member, err := s.memberRepo.FindActiveByPlateNumber(ctx, tk.PlateNumber)
@@ -86,56 +132,61 @@ func (s *ticketService) CheckTicket(ctx context.Context, req *ticket.CheckTicket
 	}
 
 	if !isMember {
-		penalty := calculatePenalty(tk.CheckIn, &now)
-		totalFee += penalty
+		fineAmount = int64(calculatePenalty(&tk.CheckinTime, &now))
 	}
 
-	tk.CheckOut = &now
-	tk.TotalFee = totalFee
-	tk.Status = "Out"
+	tk.CheckoutTime = &now
+	tk.FineAmount = fineAmount
+	tk.Status = "out"
+	if req.CheckedBy != uuid.Nil {
+		tk.CheckedBy = &req.CheckedBy
+	}
 
-	if err := s.repo.Update(ctx, &tk); err != nil {
+	if err := s.repo.UpdateCheckout(ctx, tk); err != nil {
 		return nil, fmt.Errorf("failed to update ticket: %w", err)
 	}
 
-	// Soft delete (archive) ตั๋วที่ check-out แล้ว
-	if err := s.repo.SoftDelete(ctx, tk.ID); err != nil {
+	if err := s.repo.SoftDelete(ctx, tk); err != nil {
 		return nil, fmt.Errorf("failed to archive ticket: %w", err)
 	}
 
+	totalFee := BaseFee + float64(fineAmount)
 	message := fmt.Sprintf("Check-out successful. Total fee: %.0f KIP", totalFee)
-	if !isMember {
-		penalty := calculatePenalty(tk.CheckIn, &now)
-		if penalty > 0 {
-			days := int(penalty / PenaltyFee)
-			message = fmt.Sprintf(
-				"Check-out successful. Late %d day(s). Penalty: %.0f KIP. Total: %.0f KIP",
-				days, penalty, totalFee,
-			)
-		}
-	} else {
+	if !isMember && fineAmount > 0 {
+		days := int(fineAmount) / int(PenaltyFee)
+		message = fmt.Sprintf(
+			"Check-out successful. Late %d day(s). Penalty: %d KIP. Total: %.0f KIP",
+			days, fineAmount, totalFee,
+		)
+	} else if isMember {
 		message = fmt.Sprintf("Check-out successful. Member — no penalty. Fee: %.0f KIP", BaseFee)
 	}
 
 	return &ticket.CheckTicketResponse{
-		Ticket:  &tk,
+		Ticket:  tk,
 		Message: message,
 	}, nil
 }
 
-// SearchTicket ค้นหาตั๋วจากทะเบียนรถ (กรณีลูกค้าทำตั๋วหาย)
 func (s *ticketService) SearchTicket(ctx context.Context, req *ticket.SearchTicketRequest) (*ticket.SearchTicketResponse, error) {
-	tickets, err := s.repo.SearchByPlateNumber(ctx, req.PlateNumber)
+	var tickets []ticket.Ticket
+	var err error
+
+	if req.PlateNumber != "" {
+		tickets, err = s.repo.FindByPlate(ctx, req.PlateNumber)
+	} else {
+		tickets, err = s.repo.SearchTickets(ctx, req.Query, req.Status)
+	}
 	if err != nil {
 		return nil, err
 	}
+
 	return &ticket.SearchTicketResponse{
 		Tickets: tickets,
 		Count:   len(tickets),
 	}, nil
 }
 
-// GetIncome ดูรายได้ (daily / weekly / monthly)
 func (s *ticketService) GetIncome(ctx context.Context, req *ticket.IncomeRequest) (*ticket.IncomeResponse, error) {
 	now := time.Now()
 	var start time.Time
@@ -145,7 +196,7 @@ func (s *ticketService) GetIncome(ctx context.Context, req *ticket.IncomeRequest
 		start = now.AddDate(0, 0, -7)
 	case "monthly":
 		start = now.AddDate(0, -1, 0)
-	default: // daily
+	default:
 		start = truncateToDay(now)
 		req.Period = "daily"
 	}
@@ -155,26 +206,25 @@ func (s *ticketService) GetIncome(ctx context.Context, req *ticket.IncomeRequest
 		return nil, err
 	}
 
-	// คำนวณรายได้รวม
 	var totalIncome float64
 	dayMap := make(map[string]*ticket.IncomeDetail)
 
 	for _, t := range tickets {
-		totalIncome += t.TotalFee
-		dateKey := ""
-		if t.CheckOut != nil {
-			dateKey = t.CheckOut.Format("2006-01-02")
-		} else {
-			dateKey = t.CreatedAt.Format("2006-01-02")
+		income := BaseFee + float64(t.FineAmount)
+		totalIncome += income
+
+		dateKey := t.CheckinTime.Format("2006-01-02")
+		if t.CheckoutTime != nil {
+			dateKey = t.CheckoutTime.Format("2006-01-02")
 		}
 
 		if detail, ok := dayMap[dateKey]; ok {
-			detail.Income += t.TotalFee
+			detail.Income += income
 			detail.Count++
 		} else {
 			dayMap[dateKey] = &ticket.IncomeDetail{
 				Date:   dateKey,
-				Income: t.TotalFee,
+				Income: income,
 				Count:  1,
 			}
 		}
@@ -193,7 +243,6 @@ func (s *ticketService) GetIncome(ctx context.Context, req *ticket.IncomeRequest
 	}, nil
 }
 
-// calculatePenalty คำนวณค่าปรับตามจำนวนวันที่เกิน
 func calculatePenalty(checkIn, checkOut *time.Time) float64 {
 	if checkIn == nil || checkOut == nil {
 		return 0

@@ -1,8 +1,12 @@
 package handler
 
 import (
+	"strings"
+
+	"seagame/ticket/backend/internal/middleware"
 	"seagame/ticket/backend/internal/models/ticket"
 	"seagame/ticket/backend/internal/service"
+	util "seagame/ticket/backend/utils"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
@@ -25,102 +29,40 @@ func NewTicketHandler(ticketService service.TicketService) *TicketHandler {
 func (h *TicketHandler) CreateTicket(c *fiber.Ctx) error {
 	var req ticket.CreateTicketRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"success": false,
-			"error":   "invalid request body",
-		})
+		return c.Status(400).JSON(util.Fail("invalid request body"))
 	}
-	if err := h.validate.Struct(&req); err != nil {
-		return c.Status(422).JSON(fiber.Map{
-			"success": false,
-			"error":   err.Error(),
-		})
+	if req.PlateNumber == "" {
+		return c.Status(400).JSON(util.Fail("plate_number is required"))
 	}
-
-	res, err := h.service.CreateTicket(c.Context(), &req)
+	req.IssuedBy = middleware.GetUserID(c)
+	resp, err := h.service.CreateTicket(c.Context(), &req)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"success": false,
-			"error":   err.Error(),
-		})
+		return c.Status(500).JSON(util.Fail(err.Error()))
 	}
-
-	return c.Status(201).JSON(fiber.Map{
-		"success": true,
-		"data":    res,
-	})
+	return c.Status(201).JSON(util.OK(resp, "ticket created"))
 }
 
-// CheckTicket สแกนออก (Check-out)
-func (h *TicketHandler) CheckTicket(c *fiber.Ctx) error {
-	var req ticket.CheckTicketRequest
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"success": false,
-			"error":   "invalid request body",
-		})
+func (h *TicketHandler) Checkout(c *fiber.Ctx) error {
+	var body struct {
+		TicketCode string `json:"ticket_code"`
 	}
-	if err := h.validate.Struct(&req); err != nil {
-		return c.Status(422).JSON(fiber.Map{
-			"success": false,
-			"error":   err.Error(),
-		})
+	if err := c.BodyParser(&body); err != nil || body.TicketCode == "" {
+		return c.Status(400).JSON(util.Fail("ticket_code is required"))
 	}
-
-	res, err := h.service.CheckTicket(c.Context(), &req)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"success": false,
-			"error":   err.Error(),
-		})
-	}
-
-	return c.Status(200).JSON(fiber.Map{
-		"success": true,
-		"data":    res,
+	resp, err := h.service.CheckTicket(c.Context(), &ticket.CheckTicketRequest{
+		TicketCode: body.TicketCode,
+		CheckedBy:  middleware.GetUserID(c),
 	})
-}
-
-// SearchTicket ค้นหาตั๋วจากทะเบียนรถ
-func (h *TicketHandler) SearchTicket(c *fiber.Ctx) error {
-	plateNumber := c.Query("plate_number")
-	if plateNumber == "" {
-		return c.Status(400).JSON(fiber.Map{
-			"success": false,
-			"error":   "plate_number is required",
-		})
-	}
-
-	req := &ticket.SearchTicketRequest{PlateNumber: plateNumber}
-	res, err := h.service.SearchTicket(c.Context(), req)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"success": false,
-			"error":   err.Error(),
-		})
+		msg := err.Error()
+		switch {
+		case strings.Contains(msg, "not found"):
+			return c.Status(404).JSON(util.Fail(msg))
+		case strings.Contains(msg, "already been checked out"), strings.Contains(msg, "expired"):
+			return c.Status(409).JSON(util.Fail(msg))
+		default:
+			return c.Status(400).JSON(util.Fail(msg))
+		}
 	}
-
-	return c.Status(200).JSON(fiber.Map{
-		"success": true,
-		"data":    res,
-	})
-}
-
-// GetIncome ดูรายได้ (daily / weekly / monthly)
-func (h *TicketHandler) GetIncome(c *fiber.Ctx) error {
-	period := c.Query("period", "daily")
-
-	req := &ticket.IncomeRequest{Period: period}
-	res, err := h.service.GetIncome(c.Context(), req)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"success": false,
-			"error":   err.Error(),
-		})
-	}
-
-	return c.Status(200).JSON(fiber.Map{
-		"success": true,
-		"data":    res,
-	})
+	return c.Status(200).JSON(util.OK(resp, resp.Message))
 }

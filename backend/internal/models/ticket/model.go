@@ -7,22 +7,26 @@ import (
 	"gorm.io/gorm"
 )
 
+// Ticket represents a parking session for a regular customer
 type Ticket struct {
-	ID          uuid.UUID      `json:"id"           gorm:"type:uuid;primaryKey"`
-	TicketCode  string         `json:"ticket_code"  gorm:"uniqueIndex;not null"`
-	PlateNumber string         `json:"plate_number" gorm:"not null;index"`
-	CheckIn     *time.Time     `json:"check_in"`
-	CheckOut    *time.Time     `json:"check_out"`
-	TotalFee    float64        `json:"total_fee"    gorm:"default:2000"`
-	Status      string         `json:"status"       gorm:"type:varchar(10);default:'In'"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `json:"-"            gorm:"index"`
+	ID           uuid.UUID `gorm:"type:uuid;primaryKey"`
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	TicketCode   string         `gorm:"uniqueIndex;not null"`
+	PlateNumber  string         `gorm:"not null;index"`
+	CustomerRole string         `gorm:"not null;default:Customer"` // Customer | Membership
+	CheckinTime  time.Time      `gorm:"not null"`
+	CheckoutTime *time.Time     `gorm:"index"`
+	Status       string         `gorm:"not null;default:in;index"` // in | out
+	FineAmount   int64          `gorm:"default:0"`                 // kip
+	IssuedBy     uuid.UUID      `gorm:"type:uuid;not null"`        // FK -> User.ID
+	CheckedBy    *uuid.UUID     `gorm:"type:uuid"`                 // FK -> User.ID
+	DeletedAt    gorm.DeletedAt `gorm:"index"`                     // soft delete
 }
 
-func (t *Ticket) BeforeCreate(tx *gorm.DB) error {
+func (t *Ticket) BeforeCreate(tx *gorm.DB) (err error) {
 	if t.ID == uuid.Nil {
 		t.ID = uuid.New()
 	}
-	return nil
+	return
 }
