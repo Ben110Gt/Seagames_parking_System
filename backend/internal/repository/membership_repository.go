@@ -13,7 +13,6 @@ import (
 type MembershipRepository interface {
 	Create(ctx context.Context, m *membership.MembershipCard) error
 	FindByCode(ctx context.Context, code string) (*membership.MembershipCard, error)
-	FindByPlate(ctx context.Context, plate string) (*membership.MembershipCard, error)
 	FindActiveByPlateNumber(ctx context.Context, plateNumber string) (*membership.MembershipCard, error)
 	FindAll(ctx context.Context) ([]membership.MembershipCard, error)
 	FindActive(ctx context.Context) ([]membership.MembershipCard, error)

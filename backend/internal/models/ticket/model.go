@@ -7,7 +7,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// Ticket represents a parking session for a regular customer
 type Ticket struct {
 	ID           uuid.UUID `gorm:"type:uuid;primaryKey"`
 	CreatedAt    time.Time

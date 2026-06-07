@@ -15,7 +15,7 @@ func NewUserHandler(userService service.UserService) *userHandler {
 	return &userHandler{userService: userService}
 }
 
-// GetUserByID ดึงข้อมูล user จาก ID
+// Get api/v1/users/:id
 func (h *userHandler) GetUserByID(c *fiber.Ctx) error {
 	id := c.Params("id")
 	if id == "" {
@@ -31,7 +31,7 @@ func (h *userHandler) GetUserByID(c *fiber.Ctx) error {
 	})
 }
 
-// GetAllUsers ดึงข้อมูล user ทั้งหมด
+// Get api/v1/users
 func (h *userHandler) GetAllUsers(c *fiber.Ctx) error {
 	users, err := h.userService.GetAllUsers(c.Context())
 	if err != nil {
@@ -43,7 +43,7 @@ func (h *userHandler) GetAllUsers(c *fiber.Ctx) error {
 	})
 }
 
-// UpdateUser อัปเดตข้อมูล user
+// PUT /api/v1/users
 func (h *userHandler) UpdateUser(c *fiber.Ctx) error {
 	var req user.User
 	if err := c.BodyParser(&req); err != nil {
@@ -57,7 +57,7 @@ func (h *userHandler) UpdateUser(c *fiber.Ctx) error {
 	})
 }
 
-// DeleteUser ลบ user
+// DELETE /api/v1/users/:id
 func (h *userHandler) DeleteUser(c *fiber.Ctx) error {
 	id := c.Params("id")
 	if id == "" {

@@ -14,6 +14,7 @@ import (
 
 func NewServer() {
 
+	// Load environment variables from .env file
 	if err := godotenv.Load("../.env"); err != nil {
 		log.Fatal("Error loading .env file Server")
 	}
@@ -22,11 +23,12 @@ func NewServer() {
 		AppName: "Seagames Parking System v1.0",
 	})
 
-	// เชื่อมต่อ database
+	// Connect to the database
 	database.ConnectDatabase()
 
-	// Middleware
 	app.Use(logger.New())
+
+	// CORS configuration
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
@@ -45,7 +47,10 @@ func NewServer() {
 	routes.SetupAuthRoutes(app)
 	routes.SetupUserRoutes(app)
 	routes.TicketRoutes(app)
+	routes.SetupMembershipRoutes(app)
+	routes.SetIncomeRoutes(app)
 
+	// Start the server
 	port := os.Getenv("APP_PORT")
 
 	app.Listen("0.0.0.0:" + port)

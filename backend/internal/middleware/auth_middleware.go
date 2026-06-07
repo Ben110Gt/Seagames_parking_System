@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// JWTMiddleware ตรวจสอบ JWT
 func JWTMiddleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		authHeader := c.Get("Authorization")

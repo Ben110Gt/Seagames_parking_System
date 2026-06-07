@@ -7,7 +7,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// MembershipCard represents a monthly parking membership
 type MembershipCard struct {
 	ID               uuid.UUID `gorm:"type:uuid;primaryKey"`
 	CardCode         string    `gorm:"uniqueIndex;not null"`

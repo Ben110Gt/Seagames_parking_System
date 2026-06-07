@@ -19,22 +19,12 @@ func TicketRoutes(app *fiber.App) {
 	tickService := service.NewTicketService(tickRepo, memberRepo, transactionRepo)
 	ticketHandler := handler.NewTicketHandler(tickService)
 
-	// app.Post("/tickets/create", ticketHandler.CreateTicket)
-
-	// app.Post("/tickets/check", ticketHandler.CheckTicket)
-
-	// app.Get("/tickets/search", ticketHandler.SearchTicket)
-
 	admin := app.Group("/admin")
 	admin.Use(middleware.JWTMiddleware())
 	admin.Use(middleware.RoleMiddleware("Owner"))
-	admin.Post("/create-ticket", ticketHandler.CreateTicket)
-	admin.Post("/check-ticket", ticketHandler.Checkout)
-	// admin.Get("/tickets/search", ticketHandler.SearchTicket)
+	admin.Post("/create-ticket", ticketHandler.CreateTicket)     // ✅
+	admin.Post("/check-ticket", ticketHandler.Checkout)          // ✅
+	admin.Get("/tickets/search", ticketHandler.SearchTicket)     // ✅
+	admin.Get("/tickets/active", ticketHandler.GetActiveTickets) // ✅
 
-	// Dashboard รายได้
-	dashboard := app.Group("/dashboard")
-	dashboard.Use(middleware.JWTMiddleware())
-	dashboard.Use(middleware.RoleMiddleware("Owner"))
-	// dashboard.Get("/income", ticketHandler.GetIncome)
 }

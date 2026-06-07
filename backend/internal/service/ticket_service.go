@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strings"
 	"seagame/ticket/backend/internal/models/ticket"
 	"seagame/ticket/backend/internal/repository"
 	util "seagame/ticket/backend/utils"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,7 +19,8 @@ type TicketService interface {
 	CreateTicket(ctx context.Context, req *ticket.CreateTicketRequest) (*ticket.CreateTicketResponse, error)
 	CheckTicket(ctx context.Context, req *ticket.CheckTicketRequest) (*ticket.CheckTicketResponse, error)
 	SearchTicket(ctx context.Context, req *ticket.SearchTicketRequest) (*ticket.SearchTicketResponse, error)
-	GetIncome(ctx context.Context, req *ticket.IncomeRequest) (*ticket.IncomeResponse, error)
+
+	GetActiveTickets(ctx context.Context) ([]ticket.Ticket, error)
 }
 
 type ticketService struct {
@@ -187,60 +188,19 @@ func (s *ticketService) SearchTicket(ctx context.Context, req *ticket.SearchTick
 	}, nil
 }
 
-func (s *ticketService) GetIncome(ctx context.Context, req *ticket.IncomeRequest) (*ticket.IncomeResponse, error) {
-	now := time.Now()
-	var start time.Time
-
-	switch req.Period {
-	case "weekly":
-		start = now.AddDate(0, 0, -7)
-	case "monthly":
-		start = now.AddDate(0, -1, 0)
-	default:
-		start = truncateToDay(now)
-		req.Period = "daily"
-	}
-
-	tickets, err := s.repo.GetIncomeByDateRange(ctx, start, now)
+func (s *ticketService) GetActiveTickets(ctx context.Context) ([]ticket.Ticket, error) {
+	tickets, err := s.repo.FindActive(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	var totalIncome float64
-	dayMap := make(map[string]*ticket.IncomeDetail)
-
+	result := make([]ticket.Ticket, 0, len(tickets))
 	for _, t := range tickets {
-		income := BaseFee + float64(t.FineAmount)
-		totalIncome += income
-
-		dateKey := t.CheckinTime.Format("2006-01-02")
-		if t.CheckoutTime != nil {
-			dateKey = t.CheckoutTime.Format("2006-01-02")
-		}
-
-		if detail, ok := dayMap[dateKey]; ok {
-			detail.Income += income
-			detail.Count++
-		} else {
-			dayMap[dateKey] = &ticket.IncomeDetail{
-				Date:   dateKey,
-				Income: income,
-				Count:  1,
-			}
-		}
+		fine, _ := util.CalcFine(t.CheckinTime, time.Now())
+		t.FineAmount = fine
+		result = append(result, t)
 	}
-
-	details := make([]ticket.IncomeDetail, 0, len(dayMap))
-	for _, d := range dayMap {
-		details = append(details, *d)
-	}
-
-	return &ticket.IncomeResponse{
-		Period:      req.Period,
-		TotalIncome: totalIncome,
-		TotalCount:  len(tickets),
-		Details:     details,
-	}, nil
+	return result, nil
 }
 
 func calculatePenalty(checkIn, checkOut *time.Time) float64 {

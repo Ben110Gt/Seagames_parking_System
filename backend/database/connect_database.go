@@ -17,7 +17,7 @@ import (
 var DB *gorm.DB
 
 func ConnectDatabase() {
-	// ลอง load .env จากหลาย path
+
 	envPaths := []string{".env", "../.env", "../../.env"}
 	loaded := false
 	for _, p := range envPaths {

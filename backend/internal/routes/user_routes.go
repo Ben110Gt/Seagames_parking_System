@@ -18,8 +18,8 @@ func SetupUserRoutes(app *fiber.App) {
 	admin := app.Group("/admin/users")
 	admin.Use(middleware.JWTMiddleware())
 	admin.Use(middleware.RoleMiddleware("Owner"))
-	admin.Get("/:id", userHandler.GetUserByID)
-	admin.Get("/", userHandler.GetAllUsers)
-	admin.Put("/:id", userHandler.UpdateUser)
-	admin.Delete("/:id", userHandler.DeleteUser)
+	admin.Get("/:id", userHandler.GetUserByID)   // ✅
+	admin.Get("/", userHandler.GetAllUsers)      // ✅
+	admin.Put("/:id", userHandler.UpdateUser)    // ✅
+	admin.Delete("/:id", userHandler.DeleteUser) // ✅
 }

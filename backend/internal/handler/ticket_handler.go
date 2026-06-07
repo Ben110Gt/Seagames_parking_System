@@ -25,7 +25,7 @@ func NewTicketHandler(ticketService service.TicketService) *TicketHandler {
 	}
 }
 
-// CreateTicket ออกตั๋ว (Check-in)
+// POST /api/v1/tickets
 func (h *TicketHandler) CreateTicket(c *fiber.Ctx) error {
 	var req ticket.CreateTicketRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -42,6 +42,7 @@ func (h *TicketHandler) CreateTicket(c *fiber.Ctx) error {
 	return c.Status(201).JSON(util.OK(resp, "ticket created"))
 }
 
+// POST /api/v1/tickets/checkout
 func (h *TicketHandler) Checkout(c *fiber.Ctx) error {
 	var body struct {
 		TicketCode string `json:"ticket_code"`
@@ -65,4 +66,26 @@ func (h *TicketHandler) Checkout(c *fiber.Ctx) error {
 		}
 	}
 	return c.Status(200).JSON(util.OK(resp, resp.Message))
+}
+
+// POST /api/v1/tickets/search
+func (h *TicketHandler) SearchTicket(c *fiber.Ctx) error {
+	var req ticket.SearchTicketRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(util.Fail("invalid request body"))
+	}
+	resp, err := h.service.SearchTicket(c.Context(), &req)
+	if err != nil {
+		return c.Status(500).JSON(util.Fail(err.Error()))
+	}
+	return c.Status(200).JSON(util.OK(resp, "ticket searched"))
+}
+
+// GET /api/v1/tickets/active
+func (h *TicketHandler) GetActiveTickets(c *fiber.Ctx) error {
+	resp, err := h.service.GetActiveTickets(c.Context())
+	if err != nil {
+		return c.Status(500).JSON(util.Fail(err.Error()))
+	}
+	return c.Status(200).JSON(util.OK(resp, "active tickets"))
 }

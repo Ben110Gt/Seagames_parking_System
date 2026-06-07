@@ -14,11 +14,7 @@ func SetupAuthRoutes(app *fiber.App) {
 	userService := service.NewUserService(userRepo)
 	authHandler := handler.NewAuthHandler(userService)
 
-	// /auth group
 	auth := app.Group("/auth")
-	auth.Post("/login", authHandler.Login)
-	auth.Post("/register", authHandler.Register)
-
-	// Root-level /login สำหรับ Flutter frontend ที่เรียก POST /login
-	app.Post("/login", authHandler.Login)
+	auth.Post("/login", authHandler.Login)       // ✅
+	auth.Post("/register", authHandler.Register) // ✅
 }

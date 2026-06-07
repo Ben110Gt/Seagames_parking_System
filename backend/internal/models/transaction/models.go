@@ -7,7 +7,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// Transaction records a completed payment event (fine or membership)
 type Transaction struct {
 	ID            uuid.UUID `gorm:"type:uuid;primaryKey"`
 	CreatedAt     time.Time

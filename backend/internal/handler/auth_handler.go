@@ -15,7 +15,7 @@ func NewAuthHandler(userService service.UserService) *authHandler {
 	return &authHandler{userService: userService}
 }
 
-// auth handler
+// Post /api/auth/login
 func (h *authHandler) Login(c *fiber.Ctx) error {
 	var req user.LoginRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -31,6 +31,7 @@ func (h *authHandler) Login(c *fiber.Ctx) error {
 	})
 }
 
+// Post /api/auth/register
 func (h *authHandler) Register(c *fiber.Ctx) error {
 	var req user.RegisterRequest
 	if err := c.BodyParser(&req); err != nil {
