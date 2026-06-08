@@ -24,7 +24,9 @@ ORM: GORM
 
 Configuration: Environment-based configuration management.
 
-📁 Project Structure
+## 📁 Project Structure
+
+```
 .
 ├── frontend/
 │
@@ -34,17 +36,16 @@ Configuration: Environment-based configuration management.
     │       └── main.go
     │
     ├── internal/
-    │   ├── models/          # GORM model structs
-    │   ├── repository/      # Database access layer
-    │   ├── service/         # Business logic
-    │   ├── handler/         # HTTP handlers (Fiber)
-    │   ├── routes/          # Route registration
-    │   ├── middleware/       # Auth, logging middleware
-    │   ├── server/          # Fiber app setup
-    │   └── utils/           # Helpers (QR, date calc, etc.)
+    │   ├── models/       # GORM model structs
+    │   ├── repository/   # Database access layer
+    │   ├── service/      # Business logic
+    │   ├── handler/      # HTTP handlers (Fiber)
+    │   ├── routes/       # Route registration
+    │   ├── middleware/   # Auth, logging middleware
+    │   ├── server/       # Fiber app setup
+    │   └── utils/        # Helpers (QR, date calc, etc.)
     │
-    └── database/            # Migration & DB connection
-
-🗄️ Database ERD
+    └── database/         # Migration & DB connection
+```
 
 
