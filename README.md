@@ -12,38 +12,39 @@ Currently, parking at the Seagames dormitory is still using a day-based system, 
 
 📁 Tech Stack
 
-Language: Go (Golang)
+Language: Go (Golang) , Dart
 
-Web Framework: Fiber v2
+Framework: Fiber v2 ,  Flutter
 
 Database: PostgreSQL
 
 ORM: GORM
 
-APP: flutter
+
 
 Configuration: Environment-based configuration management.
 
 📁 Project Structure
+.
+├── frontend/
+│
+└── backend/
+    ├── cmd/
+    │   └── api/
+    │       └── main.go
+    │
+    ├── internal/
+    │   ├── models/          # GORM model structs
+    │   ├── repository/      # Database access layer
+    │   ├── service/         # Business logic
+    │   ├── handler/         # HTTP handlers (Fiber)
+    │   ├── routes/          # Route registration
+    │   ├── middleware/       # Auth, logging middleware
+    │   ├── server/          # Fiber app setup
+    │   └── utils/           # Helpers (QR, date calc, etc.)
+    │
+    └── database/            # Migration & DB connection
 
-frontend
+🗄️ Database ERD
 
-backend 
-               |-- cmd 
-               |      |-- api 
-               |             |-- main.go 
-               |  
-               | 
-               |-- internal 
-               |           |-- repository 
-               |           |-- service 
-               |           |-- handler 
-               |           |-- routes 
-               |           |-- middleware 
-               |           |-- server 
-               |           |-- domain 
-               |           |-- models 
-               |           |-- utils
-               | 
-               |-- database
 
